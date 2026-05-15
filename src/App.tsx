@@ -24,6 +24,7 @@ import { AI_AGENTS, REWARDS, XP_THRESHOLDS, ASSETS } from './constants';
 import { Prediction, Outcome, AIAgent, GameState, PredictionRound, Asset } from './lib/utils/types';
 import RealTimeChart from './components/RealTimeChart';
 import logo from './assets/logo.jpg';
+import { supabase } from './lib/supabase';
 import { 
   WagmiProvider, 
   useAccount, 
@@ -129,47 +130,103 @@ function MainApp() {
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [view, setView] = useState<'game' | 'agents' | 'leaderboard' | 'profile'>('game');
   const [selectedAgent, setSelectedAgent] = useState<AIAgent>(AI_AGENTS[0]);
-  const [leaderboard, setLeaderboard] = useState<{address: string, xp: number}[]>(() => {
-    const saved = localStorage.getItem('ritual_leaderboard');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [leaderboard, setLeaderboard] = useState<{address: string, xp: number}[]>([]);
 
-  const [gameState, setGameState] = useState<GameState>(() => {
-    // If connected, try to load state for this specific address
-    if (address) {
-      const saved = localStorage.getItem(`chainplay_state_${address}`);
-      if (saved) return JSON.parse(saved);
+  // Fetch Leaderboard from Supabase
+  const fetchLeaderboard = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('players')
+        .select('wallet, xp')
+        .order('xp', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      if (data) {
+        setLeaderboard(data.map(p => ({ address: p.wallet, xp: p.xp })));
+      }
+    } catch (err) {
+      console.error('Error fetching leaderboard:', err);
     }
-    const saved = localStorage.getItem('chainplay_state_anon');
-    return saved ? JSON.parse(saved) : {
-      xp: 0,
-      level: 1,
-      streak: 0,
-      totalWins: 0,
-      totalLosses: 0,
-      totalDraws: 0,
-      badges: []
-    };
-  });
+  };
 
-  // Sync state when address changes
+  // Upsert Player to Supabase
+  const upsertPlayer = async (stats: { xp: number, wins: number, losses: number, draws: number }) => {
+    if (!address) return;
+    try {
+      const { error } = await supabase
+        .from('players')
+        .upsert({
+          wallet: address,
+          xp: stats.xp,
+          wins: stats.wins,
+          losses: stats.losses,
+          draws: stats.draws
+        }, { onConflict: 'wallet' });
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error upserting player:', err);
+    }
+  };
+
+  const [gameState, setGameState] = useState<GameState>(() => ({
+    xp: 0,
+    level: 1,
+    streak: 0,
+    totalWins: 0,
+    totalLosses: 0,
+    totalDraws: 0,
+    badges: []
+  }));
+
+  // Fetch user data from Supabase on connect
   useEffect(() => {
-    const key = address ? `chainplay_state_${address}` : 'chainplay_state_anon';
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      setGameState(JSON.parse(saved));
-    } else {
-      setGameState({
-        xp: 0,
-        level: 1,
-        streak: 0,
-        totalWins: 0,
-        totalLosses: 0,
-        totalDraws: 0,
-        badges: []
-      });
-    }
+    const fetchUserData = async () => {
+      if (!address) return;
+      try {
+        const { data, error } = await supabase
+          .from('players')
+          .select('*')
+          .eq('wallet', address)
+          .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+
+        if (data) {
+          setGameState(prev => ({
+            ...prev,
+            xp: data.xp,
+            totalWins: data.wins,
+            totalLosses: data.losses,
+            totalDraws: data.draws,
+          }));
+        } else {
+          // Reset for new user if needed, but the default state is already 0s
+        }
+      } catch (err) {
+        console.error('Error fetching user data:', err);
+      }
+    };
+
+    fetchUserData();
   }, [address]);
+
+  // Real-time Leaderboard Subscription
+  useEffect(() => {
+    fetchLeaderboard();
+
+    const channel = supabase
+      .channel('public:players')
+      .on('postgres_changes', { event: '*', table: 'players', schema: 'public' }, () => {
+        fetchLeaderboard();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const [isPredicting, setIsPredicting] = useState(false);
   const [currentRound, setCurrentRound] = useState<PredictionRound | null>(null);
@@ -229,13 +286,9 @@ function MainApp() {
   }, [timeLeft, isPredicting]);
 
   useEffect(() => {
-    const key = address ? `chainplay_state_${address}` : 'chainplay_state_anon';
-    localStorage.setItem(key, JSON.stringify(gameState));
-  }, [gameState, address]);
-
-  useEffect(() => {
-    localStorage.setItem('ritual_leaderboard', JSON.stringify(leaderboard));
-  }, [leaderboard]);
+    // Session-based streak management
+    if (isPredicting) return;
+  }, [gameState.streak]);
 
   const myRank = useMemo(() => {
     if (!address) return null;
@@ -358,24 +411,29 @@ function MainApp() {
     
     newAgentStats[selectedAgent.id] = currentAgentStat;
 
+    const totalWins = outcome === Outcome.WIN ? gameState.totalWins + 1 : gameState.totalWins;
+    const totalLosses = outcome === Outcome.LOSS ? (gameState.totalLosses || 0) + 1 : (gameState.totalLosses || 0);
+    const totalDraws = outcome === Outcome.DRAW ? (gameState.totalDraws || 0) + 1 : (gameState.totalDraws || 0);
+
     setGameState(prev => ({
       ...prev,
       xp: totalXp,
       streak: newStreak,
       level: newLevel,
-      totalWins: outcome === Outcome.WIN ? prev.totalWins + 1 : prev.totalWins,
-      totalLosses: outcome === Outcome.LOSS ? (prev.totalLosses || 0) + 1 : (prev.totalLosses || 0),
-      totalDraws: outcome === Outcome.DRAW ? (prev.totalDraws || 0) + 1 : (prev.totalDraws || 0),
+      totalWins,
+      totalLosses,
+      totalDraws,
       badges: newBadges,
       agentStats: newAgentStats
     }));
 
-    // Update Leaderboard
+    // Update Global Leaderboard via Supabase
     if (address) {
-      setLeaderboard(prev => {
-        const entry = { address, xp: totalXp };
-        const filtered = prev.filter(item => item.address !== address);
-        return [...filtered, entry].sort((a, b) => b.xp - a.xp).slice(0, 50);
+      upsertPlayer({
+        xp: totalXp,
+        wins: totalWins,
+        losses: totalLosses,
+        draws: totalDraws
       });
     }
 
