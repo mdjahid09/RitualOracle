@@ -65,7 +65,7 @@ export default function RealTimeChart({ asset }: RealTimeChartProps) {
   };
 
   return (
-    <div className="w-full glass overflow-hidden ritual-glow" style={{ height: '300px' }}>
+    <div className="w-full glass overflow-hidden ritual-glow h-[250px] sm:h-[400px] lg:h-[480px]">
       <div 
         id={`tradingview_${asset.id}`} 
         ref={container} 

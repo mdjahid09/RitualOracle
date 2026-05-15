@@ -80,11 +80,11 @@ function ConnectModal({ isOpen, onClose, connectors, onConnect }: { isOpen: bool
         initial={{ scale: 0.9, y: 20, opacity: 0 }}
         animate={{ scale: 1, y: 0, opacity: 1 }}
         exit={{ scale: 0.9, y: 20, opacity: 0 }}
-        className="relative w-full max-w-sm glass p-8 ritual-glow-strong h-fit"
+        className="relative w-full max-w-sm glass p-6 sm:p-8 ritual-glow-strong h-fit mx-auto"
       >
-        <h3 className="text-xl font-bold mb-2 text-center">Connect Wallet</h3>
-        <p className="text-xs text-center text-white/40 mb-8 uppercase tracking-widest font-mono italic">Choose your preferred provider</p>
-        <div className="space-y-3">
+        <h3 className="text-lg sm:text-xl font-bold mb-1 sm:mb-2 text-center">Connect Wallet</h3>
+        <p className="text-[10px] text-center text-white/40 mb-6 sm:mb-8 uppercase tracking-widest font-mono italic">Choose your preferred provider</p>
+        <div className="space-y-2 sm:space-y-3">
           {connectors.map((connector) => (
             <button
               key={connector.id}
@@ -128,37 +128,18 @@ function MainApp() {
   const wallet = useWallet();
   const { address, isConnected } = wallet;
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
-  const [view, setView] = useState<'game' | 'agents' | 'leaderboard' | 'profile'>('game');
+  const [view, setView] = useState<'game' | 'agents' | 'profile'>('game');
   const [selectedAgent, setSelectedAgent] = useState<AIAgent>(AI_AGENTS[0]);
-  const [leaderboard, setLeaderboard] = useState<{address: string, xp: number}[]>([]);
 
-  // Fetch Leaderboard from Supabase
-  const fetchLeaderboard = async () => {
-    if (!supabase) {
-      console.error('Leaderboard: Supabase client not initialized.');
-      return;
-    }
-    try {
-      console.log('Leaderboard: Fetching top players...');
-      const { data, error } = await supabase
-        .from('players')
-        .select('wallet, xp')
-        .order('xp', { ascending: false })
-        .limit(50);
-
-      if (error) {
-        console.error('Leaderboard: Fetch error:', error);
-        throw error;
-      }
-      
-      if (data) {
-        console.log(`Leaderboard: Successfully fetched ${data.length} players.`);
-        setLeaderboard(data.map(p => ({ address: p.wallet, xp: p.xp })));
-      }
-    } catch (err) {
-      console.error('Leaderboard: Unhandled error during fetch:', err);
-    }
-  };
+  const [gameState, setGameState] = useState<GameState>(() => ({
+    xp: 0,
+    level: 1,
+    streak: 0,
+    totalWins: 0,
+    totalLosses: 0,
+    totalDraws: 0,
+    badges: []
+  }));
 
   // Upsert Player to Supabase
   const upsertPlayer = async (stats: { xp: number, wins: number, losses: number, draws: number }) => {
@@ -192,16 +173,6 @@ function MainApp() {
       console.error('Leaderboard: Unhandled error during upsert:', err);
     }
   };
-
-  const [gameState, setGameState] = useState<GameState>(() => ({
-    xp: 0,
-    level: 1,
-    streak: 0,
-    totalWins: 0,
-    totalLosses: 0,
-    totalDraws: 0,
-    badges: []
-  }));
 
   // Fetch user data from Supabase on connect
   useEffect(() => {
@@ -247,40 +218,6 @@ function MainApp() {
 
     fetchUserData();
   }, [address]);
-
-  // Real-time Leaderboard Subscription
-  useEffect(() => {
-    if (!supabase) return;
-    
-    fetchLeaderboard();
-
-    // Set up polling as fallback
-    const pollInterval = setInterval(() => {
-      fetchLeaderboard();
-    }, 10000); // every 10s
-
-    const channel = supabase
-      .channel('global-leaderboard')
-      .on('postgres_changes', { event: '*', table: 'players', schema: 'public' }, (payload) => {
-        console.log('Leaderboard update received:', payload);
-        fetchLeaderboard();
-      })
-      .subscribe((status) => {
-        console.log('Leaderboard subscription status:', status);
-      });
-
-    return () => {
-      clearInterval(pollInterval);
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  // Also fetch when switching to leaderboard view
-  useEffect(() => {
-    if (view === 'leaderboard') {
-      fetchLeaderboard();
-    }
-  }, [view]);
 
   const [isPredicting, setIsPredicting] = useState(false);
   const [currentRound, setCurrentRound] = useState<PredictionRound | null>(null);
@@ -343,12 +280,6 @@ function MainApp() {
     // Session-based streak management
     if (isPredicting) return;
   }, [gameState.streak]);
-
-  const myRank = useMemo(() => {
-    if (!address) return null;
-    const index = leaderboard.findIndex(p => p.address === address);
-    return index !== -1 ? index + 1 : null;
-  }, [leaderboard, address]);
 
   const levelInfo = useMemo(() => {
     const current = XP_THRESHOLDS.find(t => t.level === gameState.level) || XP_THRESHOLDS[0];
@@ -509,12 +440,11 @@ function MainApp() {
   const Nav = () => {
     if (currentRound || isPredicting || isTxPending || isConfirming || isConnectModalOpen) return null;
     return (
-      <nav className="fixed bottom-0 left-0 right-0 z-50 px-6 pb-6 pt-2 h-24">
-        <div className="max-w-md mx-auto h-full glass flex items-center justify-around ritual-glow">
-          <NavButton active={view === 'game'} onClick={() => setView('game')} icon={<Gamepad2 size={24} />} label="Play" />
-          <NavButton active={view === 'agents'} onClick={() => setView('agents')} icon={<TrendingUp size={24} />} label="Agents" />
-          <NavButton active={view === 'leaderboard'} onClick={() => setView('leaderboard')} icon={<Trophy size={24} />} label="LEADERBOARD" />
-          <NavButton active={view === 'profile'} onClick={() => setView('profile')} icon={<User size={24} />} label="Stats" />
+      <nav className="fixed bottom-0 left-0 right-0 z-50 px-4 sm:px-6 pb-4 sm:pb-6 pt-2 h-20 sm:h-24">
+        <div className="max-w-md mx-auto h-full glass flex items-center justify-around ritual-glow shadow-2xl">
+          <NavButton active={view === 'game'} onClick={() => setView('game')} icon={<Gamepad2 size={20} className="sm:w-6 sm:h-6" />} label="Play" />
+          <NavButton active={view === 'agents'} onClick={() => setView('agents')} icon={<TrendingUp size={20} className="sm:w-6 sm:h-6" />} label="Agents" />
+          <NavButton active={view === 'profile'} onClick={() => setView('profile')} icon={<User size={20} className="sm:w-6 sm:h-6" />} label="Stats" />
         </div>
       </nav>
     );
@@ -528,42 +458,49 @@ function MainApp() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px]" />
       </div>
 
-      <header className="relative z-10 px-6 py-6 flex items-center justify-between max-w-4xl mx-auto">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center ritual-glow-strong overflow-hidden shrink-0">
+      <header className="relative z-10 px-4 sm:px-6 py-4 sm:py-6 flex items-center justify-between max-w-4xl lg:max-w-6xl mx-auto">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-primary flex items-center justify-center ritual-glow-strong overflow-hidden shrink-0">
             <img src={logo} alt="Ritual Logo" className="w-full h-full object-cover" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight">RitualOracle</h1>
-            <p className="text-[10px] text-primary font-mono tracking-widest uppercase">Ritual Testnet</p>
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight">RitualOracle</h1>
+            <p className="text-[8px] sm:text-[10px] text-primary font-mono tracking-widest uppercase">Ritual Testnet</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {wallet.isConnected && (
-            <div className="flex items-center gap-4 pr-2 border-r border-white/5">
-              <div className="text-center hidden sm:block">
-                <p className="text-[10px] text-primary/40 uppercase tracking-widest font-mono">My Level</p>
-                <div className="flex items-center gap-1.5 justify-center">
-                  <span className="text-xs font-bold text-white tracking-tight">{levelInfo.current.title}</span>
-                </div>
+        <div className="flex items-center gap-2 sm:gap-4">
+          {wallet.isConnected ? (
+            <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-2xl p-1 pr-3 shadow-2xl ritual-glow-strong">
+              <div className="flex flex-col items-end px-3 py-1 border-r border-white/5">
+                <p className="text-[7px] sm:text-[8px] text-primary/60 uppercase tracking-widest font-mono leading-none mb-1">Ritual Balance</p>
+                <p className="text-[10px] sm:text-xs font-bold text-primary italic leading-none whitespace-nowrap ritual-glow-text">
+                  {parseFloat(wallet.ritualBalance).toFixed(4)} {wallet.ritualSymbol}
+                </p>
               </div>
-              <div className="text-right hidden sm:block">
-                <p className="text-[10px] text-primary/40 uppercase tracking-widest font-mono">Balance</p>
-                <p className="text-xs font-bold text-primary ritual-glow-text">{wallet.ritualBalance} {wallet.ritualSymbol}</p>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => wallet.disconnect()}
+                  className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-xl hover:bg-white/5 transition-colors group"
+                >
+                  <span className="hidden sm:inline text-[10px] font-mono font-bold text-white/60 group-hover:text-primary transition-colors">
+                    {wallet.address?.slice(0, 6)}...{wallet.address?.slice(-4)}
+                  </span>
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-primary flex items-center justify-center border border-primary/20 shrink-0 ritual-glow transition-transform group-active:scale-95">
+                    <User size={14} className="text-black" />
+                  </div>
+                </button>
               </div>
             </div>
+          ) : (
+            <button 
+              onClick={() => setIsConnectModalOpen(true)}
+              className="px-4 sm:px-8 py-2 rounded-xl text-xs sm:text-sm font-black uppercase tracking-[0.2em] transition-all h-10 sm:h-12 bg-white text-black hover:bg-primary shadow-[0_0_30px_rgba(255,255,255,0.1)] flex items-center gap-3 active:scale-95"
+            >
+              <Wallet size={18} />
+              Connect
+            </button>
           )}
-          <button 
-            onClick={() => wallet.isConnected ? wallet.disconnect() : setIsConnectModalOpen(true)}
-            className={cn(
-              "px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 transition-all h-10 border border-white/5",
-              wallet.isConnected ? "glass" : "bg-white text-black hover:bg-primary hover:text-black shadow-[0_0_15px_rgba(255,255,255,0.1)]"
-            )}
-          >
-            <Wallet size={16} />
-            {wallet.isConnected ? (wallet.address?.slice(0, 6) + '...' + wallet.address?.slice(-4)) : "Connect Wallet"}
-          </button>
         </div>
       </header>
 
@@ -578,7 +515,7 @@ function MainApp() {
         )}
       </AnimatePresence>
 
-      <main className="relative z-10 max-w-4xl mx-auto px-6 py-4 pb-12">
+      <main className="relative z-10 max-w-4xl lg:max-w-6xl mx-auto px-4 sm:px-6 py-4 pb-12">
         <AnimatePresence mode="wait">
           {view === 'game' && (
             <motion.div
@@ -586,226 +523,231 @@ function MainApp() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="space-y-6 h-full w-full"
+              className="h-full w-full"
             >
-              <div className="flex items-center justify-between glass p-4">
-                <div className="flex items-center gap-4">
-                  <div className="relative">
-                    <div className="w-12 h-12 rounded-full border-2 border-primary overflow-hidden p-0.5">
-                      <img src={selectedAgent.avatar} alt="Agent" className="w-full h-full rounded-full" />
-                    </div>
-                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-black border border-primary rounded-full flex items-center justify-center">
-                      <ShieldCheck size={12} className="text-primary" />
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-sm">{selectedAgent.name}</h3>
-                    <p className="text-xs text-white/50">{selectedAgent.type}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-white/50 mb-1">Current Streak</p>
-                  <div className="flex items-center justify-end gap-1.5 font-bold text-primary">
-                    <Flame size={14} fill="currentColor" />
-                    {gameState.streak}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between glass p-4">
-                <div className="flex gap-2 p-1 bg-white/5 rounded-xl border border-white/10">
-                  {ASSETS.map((asset) => (
-                    <button
-                      key={asset.id}
-                      onClick={() => setSelectedAsset(asset)}
-                      className={cn(
-                        "px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
-                        selectedAsset.id === asset.id 
-                          ? "bg-primary text-black shadow-lg ritual-glow" 
-                          : "text-white/60 hover:text-white"
-                      )}
-                    >
-                      <img src={asset.logo} alt={asset.symbol} className={cn("w-4 h-4 rounded-full", selectedAsset.id === asset.id ? "" : "grayscale")} />
-                      ${asset.symbol}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-3 pr-2">
-                  <div className="text-right">
-                    <p className="text-[10px] text-white/40 uppercase tracking-widest font-mono">Market Hint</p>
-                    <div className={cn(
-                      "flex items-center justify-end gap-1 font-bold text-xs",
-                      lastPriceTrend === 'up' ? "text-primary" : "text-red-400"
-                    )}>
-                      {lastPriceTrend === 'up' ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
-                      {lastPriceTrend.toUpperCase()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <RealTimeChart asset={selectedAsset} />
-
-              <div className="glass p-8 pt-20 min-h-[450px] flex flex-col items-center justify-start text-center relative overflow-hidden h-full w-full">
-                <div className="absolute top-0 left-0 w-full p-4 border-b border-white/5 bg-white/[0.04] backdrop-blur-md flex items-center justify-between z-20">
-                  <div className="flex items-center gap-2">
-                    <History size={14} className="text-white/40" />
-                    <span className="text-[10px] uppercase tracking-tighter text-white/40 font-mono">
-                      {isPredicting ? `Lock Period: ${timeLeft}s` : "Interval: 15s"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase tracking-tighter text-primary font-mono font-bold ritual-glow-text">
-                      ${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col items-center mb-10">
-                  <div className="relative w-28 h-28 flex items-center justify-center shrink-0">
-                    <svg className="absolute inset-0 w-full h-full -rotate-90">
-                      <circle
-                        cx="56" cy="56" r="44"
-                        stroke="currentColor" strokeWidth="4"
-                        fill="transparent"
-                        className="text-white/5"
-                      />
-                      {isPredicting && (
-                        <motion.circle
-                          cx="56" cy="56" r="44"
-                          stroke="currentColor" strokeWidth="4"
-                          fill="transparent"
-                          strokeDasharray="276.46"
-                          initial={{ strokeDashoffset: 276.46 }}
-                          animate={{ strokeDashoffset: (timeLeft / 15) * 276.46 }}
-                          className="text-primary ritual-glow"
-                        />
-                      )}
-                    </svg>
-                    <motion.div 
-                      animate={{ scale: isPredicting ? [1, 1.1, 1] : 1 }}
-                      transition={{ duration: 1, repeat: Infinity }}
-                      className="relative z-10 flex items-center justify-center"
-                    >
-                      <img src={selectedAsset.logo} alt={selectedAsset.symbol} className="w-12 h-12 object-contain drop-shadow-[0_0_15px_rgba(var(--color-primary),0.5)]" />
-                    </motion.div>
-                  </div>
-                  <div className="mt-4 flex flex-col items-center h-6">
-                    <span className="text-xl font-mono font-bold text-primary ritual-glow-text leading-none">
-                      {isPredicting ? `${timeLeft}s` : "15s"}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col items-center mb-10 h-fit">
-                  <span className="text-4xl sm:text-5xl font-black text-white tracking-tighter italic uppercase ritual-glow-text px-4 border-x border-white/5">${selectedAsset.symbol}</span>
-                  <p className="text-[10px] uppercase tracking-[0.4em] font-mono text-white/40 mt-3">Quantum Oracle Feed</p>
-                  <h2 className="text-xl font-bold text-primary mt-8 uppercase tracking-[0.2em] bg-primary/5 py-3 px-8 rounded-2xl border border-primary/20 ritual-glow">Up or Down?</h2>
-                </div>
-                <p className="text-[11px] text-white/40 mb-10 max-w-[280px] h-fit uppercase tracking-wider font-mono">Predict next 15s movement to harvest XP</p>
-
-                <div className="grid grid-cols-2 gap-4 w-full h-fit">
-                  <button 
-                    disabled={isPredicting || isTxPending || isConfirming}
-                    onClick={() => handlePrediction(Prediction.UP)}
-                    className={cn(
-                      "group relative p-6 glass flex flex-col items-center gap-3 h-fit w-full transition-all",
-                      isPredicting ? (pendingChoice === Prediction.UP ? "border-primary ritual-glow" : "opacity-30") : 
-                      (isTxPending || isConfirming ? "opacity-50 cursor-wait" : "glass-hover cursor-pointer")
-                    )}
-                  >
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center transition-colors">
-                      <ArrowUp className={cn(isPredicting && pendingChoice === Prediction.UP ? "text-primary" : "text-primary/60")} />
-                    </div>
-                    <span className="font-bold tracking-widest uppercase text-xs">
-                      {isTxPending && pendingChoice === Prediction.UP ? "Confirming..." : "Up"}
-                    </span>
-                  </button>
-                  <button 
-                    disabled={isPredicting || isTxPending || isConfirming}
-                    onClick={() => handlePrediction(Prediction.DOWN)}
-                    className={cn(
-                      "group relative p-6 glass flex flex-col items-center gap-3 h-fit w-full transition-all",
-                      isPredicting ? (pendingChoice === Prediction.DOWN ? "border-white/50" : "opacity-30") : 
-                      (isTxPending || isConfirming ? "opacity-50 cursor-wait" : "glass-hover cursor-pointer")
-                    )}
-                  >
-                    <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center transition-colors">
-                      <ArrowDown className={cn(isPredicting && pendingChoice === Prediction.DOWN ? "text-white" : "text-white/60")} />
-                    </div>
-                    <span className="font-bold tracking-widest uppercase text-xs">
-                      {isTxPending && pendingChoice === Prediction.DOWN ? "Confirming..." : "Down"}
-                    </span>
-                  </button>
-                </div>
-
-                {isTxPending && (
-                  <div className="mt-4 flex items-center gap-2 text-primary text-[10px] uppercase font-bold tracking-widest animate-pulse">
-                    <Loader2 size={12} className="animate-spin" />
-                    Waiting for Wallet confirmation...
-                  </div>
-                )}
-                {isConfirming && (
-                  <div className="mt-4 flex items-center gap-2 text-primary text-[10px] uppercase font-bold tracking-widest animate-pulse">
-                    <Loader2 size={12} className="animate-spin" />
-                    Transaction Confirming on Ritual Testnet...
-                  </div>
-                )}
-                {txError && (
-                  <div className="mt-4 text-red-400 text-[10px] uppercase font-bold tracking-widest">
-                    Transaction Failed: {txError.message.slice(0, 50)}...
-                  </div>
-                )}
-
-                <div className="mt-8 flex items-center gap-2 p-2 bg-primary/5 rounded-lg border border-primary/10">
-                  <Coins size={12} className="text-primary" />
-                  <span className="text-[10px] text-white/60 uppercase font-mono tracking-tight">Entry Fee: 0.0001 RITUAL</span>
-                </div>
-
-                {isPredicting && (
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="absolute inset-0 z-20 glass backdrop-blur-md flex flex-col items-center justify-center h-full w-full"
-                  >
-                    <div className="relative w-24 h-24 mb-6">
-                      <div className="absolute inset-0 border-4 border-primary/20 rounded-full h-full w-full" />
-                      <motion.div 
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
-                        className="absolute inset-0 border-4 border-t-primary rounded-full h-full w-full" 
-                      />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <img src={selectedAgent.avatar} alt="Agent" className="w-16 h-16 rounded-full" />
+              {/* Responsive Parent: Stack on mobile, Split on Desktop */}
+              <div className="flex flex-col lg:grid lg:grid-cols-[1fr_320px] gap-4 lg:gap-6">
+                
+                {/* LEFT COLUMN: Chart and Monitoring */}
+                <div className="space-y-4 lg:space-y-6">
+                  {/* Top Stats Bar - Desktop Optimization */}
+                  <div className="flex items-center justify-between glass p-4 ritual-glow">
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <div className="w-10 h-10 rounded-full border border-primary overflow-hidden p-0.5">
+                          <img src={selectedAgent.avatar} alt="Agent" className="w-full h-full rounded-full" />
+                        </div>
+                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-black border border-primary rounded-full flex items-center justify-center">
+                          <ShieldCheck size={10} className="text-primary" />
+                        </div>
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-xs">{selectedAgent.name}</h3>
+                        <p className="text-[10px] text-white/40 uppercase tracking-widest font-mono">Opponent</p>
                       </div>
                     </div>
-                    <p className="text-lg font-bold">Agent {selectedAgent.name}</p>
-                    <p className="text-sm text-white/50">Processing Prediction...</p>
-                  </motion.div>
-                )}
-              </div>
 
-              <div className="glass p-5 h-fit w-full">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <p className={cn(
-                      "text-xs font-mono uppercase tracking-widest",
-                      gameState.level === 5 ? "text-primary ritual-glow-text font-bold" : "text-white/40"
-                    )}>
-                      {levelInfo.current.title}
-                    </p>
+                    <div className="flex items-center gap-6">
+                      <div className="text-center hidden sm:block">
+                        <p className="text-[9px] text-white/40 uppercase tracking-widest font-mono mb-0.5">Price Target</p>
+                        <p className="text-sm font-bold text-primary ritual-glow-text">
+                           ${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[9px] text-white/40 uppercase tracking-widest font-mono mb-0.5">Timer</p>
+                        <div className={cn(
+                          "text-sm font-black font-mono transition-colors",
+                          isPredicting ? "text-primary ritual-glow-text" : "text-white/40"
+                        )}>
+                          {isPredicting ? `${timeLeft}s` : "00:15"}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-xs font-mono text-white/40">{gameState.xp} / {levelInfo.next?.xp || 'MAX'} XP</p>
+
+                  {/* The Chart - Elevated for Desktop */}
+                  <div className="relative group">
+                    <RealTimeChart asset={selectedAsset} />
+                    <div className="absolute top-4 right-4 pointer-events-none">
+                      <div className="px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-md border border-white/10 flex items-center gap-2">
+                        <div className={cn("w-2 h-2 rounded-full animate-pulse", lastPriceTrend === 'up' ? "bg-primary" : "bg-red-500")} />
+                        <span className="text-[10px] font-mono text-white/80 uppercase tracking-widest italic">{lastPriceTrend}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* XP Progress - Wide on Desktop */}
+                  <div className="glass p-5 h-fit w-full">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Trophy size={14} className="text-primary" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-primary italic">{levelInfo.current.title}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-white/40 uppercase tracking-widest">XP Progression</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${levelProgress}%` }}
+                        className="h-full bg-primary ritual-glow shadow-[0_0_10px_rgba(0,255,136,0.5)]"
+                      />
+                    </div>
+                    <div className="flex justify-between items-center mt-2">
+                       <span className="text-[8px] font-mono text-white/20">Lv.{gameState.level}</span>
+                       <span className="text-[8px] font-mono text-white/20">{gameState.xp} / {levelInfo.next?.xp || 'MAX'} XP</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: `${levelProgress}%` }}
-                    className={cn(
-                      "h-full ritual-glow",
-                      gameState.level === 5 ? "bg-primary shadow-[0_0_15px_rgba(0,255,136,0.5)]" : "bg-primary"
+
+                {/* RIGHT COLUMN: Action & Controls */}
+                <div className="space-y-4 lg:space-y-6">
+                  {/* Asset Selection Panel */}
+                  <div className="glass p-3 font-mono">
+                    <p className="text-[9px] text-white/40 uppercase tracking-[0.2em] mb-3 ml-1">Instruments</p>
+                    <div className="flex gap-2 w-full overflow-x-auto no-scrollbar">
+                      {ASSETS.map((asset) => (
+                        <button
+                          key={asset.id}
+                          onClick={() => setSelectedAsset(asset)}
+                          className={cn(
+                            "flex flex-1 items-center justify-center gap-2 px-3 py-2.5 rounded-xl border transition-all text-left min-w-[90px]",
+                            selectedAsset.id === asset.id 
+                              ? "bg-primary/10 border-primary shadow-[0_0_15px_rgba(0,255,136,0.1)]" 
+                              : "glass bg-transparent border-white/5 hover:border-white/20"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-6 h-6 rounded-full flex items-center justify-center shrink-0 border border-white/5 bg-black/20",
+                            selectedAsset.id === asset.id ? "border-primary/50" : ""
+                          )}>
+                            <img src={asset.logo} alt={asset.symbol} className={cn("w-3.5 h-3.5 object-contain", selectedAsset.id === asset.id ? "" : "grayscale opacity-50")} />
+                          </div>
+                          <span className={cn("text-[11px] font-bold tracking-tight", selectedAsset.id === asset.id ? "text-primary" : "text-white/60")}>
+                            {asset.symbol}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Prediction Interaction Terminal */}
+                  <div className="glass p-6 text-center relative overflow-hidden flex flex-col items-center ritual-glow border-primary/10">
+                    {/* Header Info */}
+                    <div className="mb-6 flex flex-col items-center w-full">
+                      <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-4 ritual-glow">
+                        <img src={selectedAsset.logo} alt={selectedAsset.symbol} className="w-8 h-8" />
+                      </div>
+                      <h4 className="text-lg font-black text-white italic tracking-tighter uppercase mb-1">${selectedAsset.symbol}</h4>
+                      <p className="text-[10px] uppercase font-mono text-white/40 italic">Trading Pair</p>
+                    </div>
+
+                    {/* Action Title */}
+                    <div className="w-full py-3 px-4 glass bg-primary/5 border-primary/20 rounded-xl mb-6">
+                      <p className="text-[10px] text-primary/60 uppercase tracking-widest font-mono font-bold mb-1">Ritual Oracle Call</p>
+                      <h3 className="text-lg font-bold text-white tracking-widest">UP OR DOWN?</h3>
+                    </div>
+
+                    {/* The Buttons */}
+                    <div className="grid grid-cols-2 gap-3 w-full">
+                      <button 
+                        disabled={isPredicting || isTxPending || isConfirming}
+                        onClick={() => handlePrediction(Prediction.UP)}
+                        className={cn(
+                          "group relative py-6 px-4 glass flex flex-col items-center justify-center gap-3 transition-all w-full border",
+                          isPredicting ? (pendingChoice === Prediction.UP ? "border-primary ritual-glow bg-primary/10" : "opacity-30") : 
+                          (isTxPending || isConfirming ? "opacity-50 cursor-wait" : "glass-hover cursor-pointer border-white/5 hover:border-primary/40")
+                        )}
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center ritual-glow">
+                          <ArrowUp size={20} className="text-primary" />
+                        </div>
+                        <span className="font-bold tracking-widest uppercase text-xs text-primary">Predict Up</span>
+                        {isTxPending && pendingChoice === Prediction.UP && <Loader2 size={14} className="absolute top-2 right-2 animate-spin text-primary" />}
+                      </button>
+
+                      <button 
+                        disabled={isPredicting || isTxPending || isConfirming}
+                        onClick={() => handlePrediction(Prediction.DOWN)}
+                        className={cn(
+                          "group relative py-6 px-4 glass flex flex-col items-center justify-center gap-3 transition-all w-full border",
+                          isPredicting ? (pendingChoice === Prediction.DOWN ? "border-red-500/50 ritual-glow bg-red-500/10" : "opacity-30") : 
+                          (isTxPending || isConfirming ? "opacity-50 cursor-wait" : "glass-hover cursor-pointer border-white/5 hover:border-red-500/40")
+                        )}
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center shadow-[0_0_15px_rgba(239,68,68,0.2)]">
+                          <ArrowDown size={20} className="text-red-500" />
+                        </div>
+                        <span className="font-bold tracking-widest uppercase text-xs text-red-500">Predict Down</span>
+                        {isTxPending && pendingChoice === Prediction.DOWN && <Loader2 size={14} className="absolute top-2 right-2 animate-spin text-red-500" />}
+                      </button>
+                    </div>
+
+                    {/* Status Messages */}
+                    {(isTxPending || isConfirming) && (
+                      <div className="mt-4 flex items-center gap-2 text-primary text-[9px] uppercase font-bold tracking-widest animate-pulse h-4">
+                        <Loader2 size={10} className="animate-spin" />
+                        {isTxPending ? "Wallet Sign Required..." : "Confirming Onchain..."}
+                      </div>
                     )}
-                  />
+
+                    {!isPredicting && !isTxPending && !isConfirming && (
+                      <div className="mt-4 grid grid-cols-2 gap-2 w-full">
+                        <div className="flex items-center justify-center gap-2 py-1.5 px-2 rounded-lg bg-white/5 border border-white/10">
+                          <Coins size={10} className="text-primary" />
+                          <span className="text-[8px] text-white/40 uppercase font-mono tracking-tight">Fee: 0.0001</span>
+                        </div>
+                        <div className="flex items-center justify-center gap-2 py-1.5 px-2 rounded-lg bg-primary/5 border border-primary/10">
+                          <Wallet size={10} className="text-primary" />
+                          <span className="text-[8px] text-primary font-mono tracking-tight font-bold">
+                            {parseFloat(wallet.ritualBalance).toFixed(4)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Locked Prediction State */}
+                    {isPredicting && (
+                      <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="absolute inset-0 z-30 glass backdrop-blur-md flex flex-col items-center justify-center h-full w-full p-6"
+                      >
+                        <div className="relative w-20 h-20 mb-4">
+                          <svg className="absolute inset-0 w-full h-full -rotate-90">
+                            <circle cx="40" cy="40" r="38" stroke="currentColor" strokeWidth="2" fill="transparent" className="text-white/5" />
+                            <motion.circle 
+                              cx="40" cy="40" r="38" stroke="currentColor" strokeWidth="3" fill="transparent"
+                              strokeDasharray="238.76"
+                              initial={{ strokeDashoffset: 238.76 }}
+                              animate={{ strokeDashoffset: (timeLeft / 15) * 238.76 }}
+                              className="text-primary ritual-glow"
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <img src={selectedAgent.avatar} alt="Agent" className="w-12 h-12 rounded-full border border-white/20" />
+                          </div>
+                        </div>
+                        <p className="text-sm font-bold text-primary ritual-glow-text mb-1">{timeLeft}s Remaining</p>
+                        <p className="text-[10px] text-white/40 uppercase font-mono tracking-widest">Processing Node...</p>
+                      </motion.div>
+                    )}
+                  </div>
+
+                  {/* Quick Links / Status */}
+                  <div className="flex gap-2">
+                    <div className="flex-1 glass p-3 text-center border-white/5">
+                      <p className="text-[8px] text-white/40 uppercase font-mono mb-1">Win Rate</p>
+                      <p className="text-xs font-bold text-white tracking-widest">{gameState.totalWins > 0 ? Math.round((gameState.totalWins / (gameState.totalWins + gameState.totalLosses + gameState.totalDraws)) * 100) : 0}%</p>
+                    </div>
+                    <div className="flex-1 glass p-3 text-center border-primary/20 bg-primary/5">
+                      <p className="text-[8px] text-primary/60 uppercase font-mono mb-1">Streak</p>
+                      <div className="flex items-center justify-center gap-1 font-bold text-primary ritual-glow-text">
+                        <Flame size={12} fill="currentColor" />
+                        <span className="text-xs">{gameState.streak}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -817,13 +759,13 @@ function MainApp() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="space-y-6 h-full w-full"
+              className="space-y-4 sm:space-y-6 h-full w-full"
             >
-              <h2 className="text-2xl font-bold flex items-center gap-3">
-                <Trophy className="text-primary" />
+              <h2 className="text-xl sm:text-2xl font-bold flex items-center gap-2 sm:gap-3 px-1">
+                <Trophy className="text-primary w-5 h-5 sm:w-6 sm:h-6" />
                 Select Opponent
               </h2>
-              <div className="grid gap-4 h-full w-full">
+              <div className="grid gap-3 sm:gap-4 h-full w-full">
                 {AI_AGENTS.map((agent) => {
                   const dynamicStats = gameState.agentStats?.[agent.id] || { wins: 0, losses: 0, draws: 0 };
                   const totalWins = (agent.stats?.wins || 0) + dynamicStats.wins;
@@ -840,33 +782,33 @@ function MainApp() {
                         setView('game');
                       }}
                       className={cn(
-                        "p-6 glass flex items-center gap-6 text-left transition-all h-fit w-full",
+                        "p-4 sm:p-6 glass flex items-center gap-3 sm:gap-6 text-left transition-all h-fit w-full",
                         selectedAgent.id === agent.id ? "border-primary ritual-glow" : "glass-hover"
                       )}
                     >
-                      <div className="w-20 h-20 rounded-2xl overflow-hidden border border-white/10 shrink-0">
+                      <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 shrink-0">
                         <img src={agent.avatar} alt={agent.name} className="w-full h-full object-cover" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-1 gap-1 sm:gap-2">
                           <div className="flex items-center gap-2">
-                            <h3 className="font-bold text-lg truncate">{agent.name}</h3>
-                            <span className="text-[10px] text-white/30 font-mono flex items-center gap-1">
+                            <h3 className="font-bold text-base sm:text-lg truncate">{agent.name}</h3>
+                            <span className="text-[8px] sm:text-[10px] text-white/30 font-mono flex items-center gap-1">
                               · <span className="text-green-400/80">{totalWins}W</span> 
                               · <span className="text-red-400/80">{totalLosses}L</span> 
                               · <span className="text-white/40">{totalDraws}D</span> 
                               · <span className="text-primary font-bold">{winRate}%</span>
                             </span>
                           </div>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/20 bg-white/5 uppercase tracking-widest">{agent.type}</span>
+                          <span className="w-fit text-[8px] sm:text-[10px] px-2 py-0.5 rounded-full border border-white/20 bg-white/5 uppercase tracking-widest">{agent.type}</span>
                         </div>
-                        <p className="text-sm text-white/50 line-clamp-1 mb-3">{agent.description}</p>
-                        <div className="flex items-center gap-4 text-[10px] text-white/40 uppercase tracking-widest">
+                        <p className="text-xs sm:text-sm text-white/50 line-clamp-1 mb-2 sm:mb-3">{agent.description}</p>
+                        <div className="flex items-center gap-3 sm:gap-4 text-[9px] sm:text-[10px] text-white/40 uppercase tracking-widest">
                           <span className="flex items-center gap-1"><ShieldCheck size={10} /> Active</span>
-                          <span className="flex items-center gap-1 border-l border-white/10 pl-4">Latency: 240ms</span>
+                          <span className="flex items-center gap-1 border-l border-white/10 pl-3 sm:pl-4">Latency: 240ms</span>
                         </div>
                       </div>
-                      <ChevronRight size={20} className={cn(selectedAgent.id === agent.id ? "text-primary" : "text-white/20")} />
+                      <ChevronRight size={18} className={cn("shrink-0 sm:w-5 sm:h-5", selectedAgent.id === agent.id ? "text-primary" : "text-white/20")} />
                     </button>
                   );
                 })}
@@ -874,87 +816,6 @@ function MainApp() {
             </motion.div>
           )}
 
-          {view === 'leaderboard' && (
-            <motion.div
-              key="leaderboard"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="space-y-6 h-full w-full"
-            >
-              <h2 className="text-2xl font-bold">LEADERBOARD</h2>
-
-              <div className="glass p-6 h-fit w-full border-primary/20 bg-primary/5 ritual-glow">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-[10px] text-primary/60 uppercase tracking-widest font-mono">My Global Status</p>
-                    <p className="text-xl font-black text-white italic tracking-tighter uppercase">{levelInfo.current.title}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs font-mono text-primary font-bold">RANK #{myRank || '-'}</p>
-                    <p className="text-[10px] text-white/20 uppercase font-mono tracking-widest">
-                      {myRank ? (myRank === 1 ? 'King of ritual' : `Top ${Math.max(1, Math.round((myRank / Math.max(leaderboard.length, 1)) * 100))}%`) : 'Unranked'}
-                    </p>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[9px] font-mono text-white/40 uppercase tracking-widest italic">{gameState.xp} XP</span>
-                    <span className="text-[9px] font-mono text-white/40 uppercase tracking-widest italic">Target: {levelInfo.next?.xp || 'MAX'} XP</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${levelProgress}%` }}
-                      className="h-full bg-primary ritual-glow"
-                    />
-                  </div>
-                  <p className="text-[9px] text-white/20 font-mono italic text-center pt-1">
-                    {levelInfo.next ? `Need ${levelInfo.next.xp - gameState.xp} XP to reach ${levelInfo.next.title}` : 'Maximum level reached'}
-                  </p>
-                </div>
-              </div>
-              
-              <div className="glass h-fit w-full">
-                <div className="p-4 border-b border-white/5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold uppercase tracking-widest">Global Challengers</span>
-                    {supabase ? (
-                      <span className="text-[8px] bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded italic">LIVE</span>
-                    ) : (
-                      <span className="text-[8px] bg-red-500/10 text-red-500 border border-red-500/20 px-1.5 py-0.5 rounded italic">OFFLINE - CONFIG MISSING</span>
-                    )}
-                  </div>
-                  <div className="flex gap-8 text-[10px] text-white/40 uppercase font-mono">
-                    <span>Rank</span>
-                    <span>XP</span>
-                  </div>
-                </div>
-                <div className="divide-y divide-white/5 h-fit w-full">
-                  {leaderboard.length > 0 ? leaderboard.map((p, i) => (
-                    <div key={i} className="p-4 flex items-center justify-between h-fit w-full">
-                      <div className="flex items-center gap-4">
-                        <span className={cn("text-xs font-mono w-4 font-bold", i === 0 ? "text-primary text-xl" : "text-white/20")}>{i + 1}</span>
-                        <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-                          <User size={14} className="text-white/40" />
-                        </div>
-                        <span className={cn("text-sm font-medium", address === p.address ? "text-primary" : "text-white")}>
-                          {p.address.slice(0, 6)}...{p.address.slice(-4)}
-                          {address === p.address && <span className="ml-2 text-[8px] uppercase tracking-widest text-primary italic">(You)</span>}
-                        </span>
-                      </div>
-                      <span className="text-xs font-mono font-bold text-primary">{p.xp} XP</span>
-                    </div>
-                  )) : (
-                    <div className="p-8 text-center">
-                      <p className="text-xs font-mono text-white/20 uppercase tracking-widest italic">No interactions recorded yet.</p>
-                      <p className="text-[10px] text-white/10 mt-2">Be the first to secure a prediction!</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          )}
 
           {view === 'profile' && (
             <motion.div
@@ -1123,17 +984,17 @@ function MainApp() {
                 initial={{ scale: 0.9, y: 20, opacity: 0 }}
                 animate={{ scale: 1, y: 0, opacity: 1 }}
                 exit={{ scale: 0.9, y: 20, opacity: 0 }}
-                className="relative w-full max-w-sm glass p-8 text-center ritual-glow-strong h-fit"
+                className="relative w-full max-w-sm glass p-6 sm:p-8 text-center ritual-glow-strong h-fit mx-auto"
               >
-                <div className="inline-flex items-center justify-center p-2 rounded-2xl bg-primary/10 border border-primary/20 mb-6 w-fit mx-auto gap-3 h-14 px-4">
-                  <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/5 border border-white/10 p-1">
+                <div className="inline-flex items-center justify-center p-2 rounded-2xl bg-primary/10 border border-primary/20 mb-4 sm:mb-6 w-fit mx-auto gap-3 h-12 sm:h-14 px-4 font-mono">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl overflow-hidden bg-white/5 border border-white/10 p-1 shrink-0">
                     <img src={ASSETS.find(a => a.id === currentRound.asset)?.logo} alt="Asset" className="w-full h-full object-contain" />
                   </div>
-                  <span className="text-xl font-black text-primary tracking-tight">${currentRound.asset}</span>
+                  <span className="text-lg sm:text-xl font-black text-primary tracking-tight">${currentRound.asset}</span>
                 </div>
                 
                 <h3 className={cn(
-                  "text-3xl font-bold mb-2 tracking-tighter",
+                  "text-2xl sm:text-3xl font-bold mb-2 tracking-tighter",
                   currentRound.outcome === Outcome.WIN ? "text-primary" : "text-white"
                 )}>
                   {currentRound.outcome === Outcome.WIN ? "Victory" : (currentRound.outcome === Outcome.DRAW ? "Draw" : "Defeat")}
