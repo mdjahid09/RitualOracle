@@ -1,9 +1,10 @@
 import { http, createConfig } from 'wagmi';
 import { mainnet, sepolia } from 'wagmi/chains';
-import { injected } from 'wagmi/connectors';
+import { injected, walletConnect, coinbaseWallet, metaMask, safe } from 'wagmi/connectors';
 import { defineChain } from 'viem';
+import { reconnect } from '@wagmi/core';
 
-// Define Ritual Testnet (Placeholder - update with real RPC/ChainID)
+// Define Ritual Testnet
 export const ritualTestnet = defineChain({
   id: 1979,
   name: 'Ritual',
@@ -23,10 +24,18 @@ export const ritualTestnet = defineChain({
   testnet: true,
 });
 
+// Use a projectId from WalletConnect (Cloud)
+// Users should replace this with their own at https://cloud.walletconnect.com
+const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || '3fcc6b4468c7849c493c0bc589417852';
+
 export const config = createConfig({
   chains: [ritualTestnet, sepolia, mainnet],
   connectors: [
     injected(),
+    walletConnect({
+      projectId,
+      showQrModal: true,
+    }),
   ],
   transports: {
     [ritualTestnet.id]: http(),
@@ -34,3 +43,6 @@ export const config = createConfig({
     [mainnet.id]: http(),
   },
 });
+
+// Reconnect on load
+reconnect(config);

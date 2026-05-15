@@ -83,41 +83,74 @@ function ConnectModal({ isOpen, onClose, connectors, onConnect }: { isOpen: bool
         className="relative w-full max-w-sm glass p-6 sm:p-8 ritual-glow-strong h-fit mx-auto"
       >
         <h3 className="text-lg sm:text-xl font-bold mb-1 sm:mb-2 text-center">Connect Wallet</h3>
-        <p className="text-[10px] text-center text-white/40 mb-6 sm:mb-8 uppercase tracking-widest font-mono italic">Choose your preferred provider</p>
-        <div className="space-y-2 sm:space-y-3">
-          {connectors.map((connector) => (
-            <button
-              key={connector.id}
-              onClick={() => {
-                onConnect(connector);
-                onClose();
-              }}
-              className="w-full p-4 glass glass-hover flex items-center justify-between group transition-all border border-white/5 hover:border-primary/50"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center overflow-hidden border border-white/10 group-hover:border-primary/20 shrink-0">
-                  {connector.icon ? (
-                    <img src={connector.icon} alt={connector.name} className="w-full h-full p-1.5" />
-                  ) : (
-                    <div className="bg-primary/10 w-full h-full flex items-center justify-center">
-                      <Wallet size={20} className="text-primary group-hover:scale-110 transition-transform" />
+        <p className="text-[10px] text-center text-white/40 mb-6 sm:mb-8 uppercase tracking-widest font-mono italic">
+          {connectors.length > 0 ? "Choose your preferred provider" : "No providers detected"}
+        </p>
+        
+        <div className="space-y-3">
+          {connectors.length > 0 ? (
+            connectors.map((connector) => {
+              // Skip the generic "Injected" if it doesn't represent a specific found wallet
+              // and we have other options (like WalletConnect or other discovered wallets)
+              // But keep it if it's the ONLY one.
+              if (connector.id === 'injected' && connector.name === 'Injected' && connectors.length > 1) {
+                return null;
+              }
+
+              return (
+                <button
+                  key={connector.id}
+                  onClick={() => {
+                    onConnect(connector);
+                    onClose();
+                  }}
+                  className="w-full p-4 glass glass-hover flex items-center justify-between group transition-all border border-white/5 hover:border-primary/50 relative overflow-hidden active:scale-95"
+                >
+                  {/* Background flare on hover */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  
+                  <div className="flex items-center gap-4 relative z-10">
+                    <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center overflow-hidden border border-white/10 group-hover:border-primary/20 shrink-0 transition-transform group-hover:scale-105 shadow-inner">
+                      {connector.icon ? (
+                        <img src={connector.icon} alt={connector.name} className="w-8 h-8 object-contain" />
+                      ) : (
+                        <div className="bg-primary/10 w-full h-full flex items-center justify-center">
+                          <Wallet size={24} className={cn(
+                            "text-primary transition-transform",
+                            connector.name.toLowerCase().includes("metamask") ? "text-orange-500" : ""
+                          )} />
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <div className="text-left">
-                  <span className="font-bold text-sm tracking-tight block">{connector.name}</span>
-                  <span className="text-[10px] text-white/40 uppercase font-mono tracking-tighter">Ready to Connect</span>
-                </div>
-              </div>
-              <ChevronRight size={16} className="text-white/20 group-hover:text-primary group-hover:translate-x-1 transition-all" />
-            </button>
-          ))}
+                    <div className="text-left font-mono">
+                      <span className="font-bold text-sm tracking-tight block text-white group-hover:text-primary transition-colors">
+                        {connector.name}
+                      </span>
+                      <span className="text-[10px] text-white/40 uppercase tracking-tighter">
+                        {connector.id === "walletConnect" ? "Scan QR for Mobile Apps" : "Secure Extension"}
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight size={18} className="text-white/20 group-hover:text-primary group-hover:translate-x-1 transition-all" />
+                </button>
+              );
+            })
+          ) : (
+            <div className="py-8 px-4 text-center glass border-dashed border-white/10 rounded-2xl">
+              <ShieldCheck size={32} className="mx-auto mb-4 text-white/20" />
+              <p className="text-xs text-white/60 mb-2">No browser extensions found.</p>
+              <p className="text-[10px] text-white/30 uppercase tracking-wider font-mono">
+                Try opening in a new tab<br/>or check your wallet settings.
+              </p>
+            </div>
+          )}
         </div>
+        
         <button 
           onClick={onClose}
-          className="w-full mt-8 py-3 text-[10px] uppercase tracking-widest text-white/40 hover:text-white transition-colors border-t border-white/5 pt-6"
+          className="w-full mt-6 py-3 text-[10px] uppercase tracking-widest text-white/40 hover:text-white transition-colors border-t border-white/5 pt-6"
         >
-          Cancel Connection
+          Cancel
         </button>
       </motion.div>
     </div>
