@@ -134,6 +134,7 @@ function MainApp() {
 
   // Fetch Leaderboard from Supabase
   const fetchLeaderboard = async () => {
+    if (!supabase) return;
     try {
       const { data, error } = await supabase
         .from('players')
@@ -152,7 +153,7 @@ function MainApp() {
 
   // Upsert Player to Supabase
   const upsertPlayer = async (stats: { xp: number, wins: number, losses: number, draws: number }) => {
-    if (!address) return;
+    if (!address || !supabase) return;
     try {
       const { error } = await supabase
         .from('players')
@@ -183,7 +184,7 @@ function MainApp() {
   // Fetch user data from Supabase on connect
   useEffect(() => {
     const fetchUserData = async () => {
-      if (!address) return;
+      if (!address || !supabase) return;
       try {
         const { data, error } = await supabase
           .from('players')
@@ -214,6 +215,7 @@ function MainApp() {
 
   // Real-time Leaderboard Subscription
   useEffect(() => {
+    if (!supabase) return;
     fetchLeaderboard();
 
     const channel = supabase
