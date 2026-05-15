@@ -216,19 +216,36 @@ function MainApp() {
   // Real-time Leaderboard Subscription
   useEffect(() => {
     if (!supabase) return;
+    
     fetchLeaderboard();
 
+    // Set up polling as fallback
+    const pollInterval = setInterval(() => {
+      fetchLeaderboard();
+    }, 10000); // every 10s
+
     const channel = supabase
-      .channel('public:players')
-      .on('postgres_changes', { event: '*', table: 'players', schema: 'public' }, () => {
+      .channel('global-leaderboard')
+      .on('postgres_changes', { event: '*', table: 'players', schema: 'public' }, (payload) => {
+        console.log('Leaderboard update received:', payload);
         fetchLeaderboard();
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Leaderboard subscription status:', status);
+      });
 
     return () => {
+      clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // Also fetch when switching to leaderboard view
+  useEffect(() => {
+    if (view === 'leaderboard') {
+      fetchLeaderboard();
+    }
+  }, [view]);
 
   const [isPredicting, setIsPredicting] = useState(false);
   const [currentRound, setCurrentRound] = useState<PredictionRound | null>(null);
