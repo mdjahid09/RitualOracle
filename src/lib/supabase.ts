@@ -4,7 +4,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase credentials missing. Global leaderboard will not function.');
+  console.error('Supabase configuration missing! Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables.');
 }
 
 export const supabase = (supabaseUrl && supabaseAnonKey) 
@@ -13,4 +13,4 @@ export const supabase = (supabaseUrl && supabaseAnonKey)
         fetch: window.fetch.bind(window),
       },
     })
-  : null as any; // Fallback to null (or we could use a mock)
+  : null;

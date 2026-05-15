@@ -134,28 +134,46 @@ function MainApp() {
 
   // Fetch Leaderboard from Supabase
   const fetchLeaderboard = async () => {
-    if (!supabase) return;
+    if (!supabase) {
+      console.error('Leaderboard: Supabase client not initialized.');
+      return;
+    }
     try {
+      console.log('Leaderboard: Fetching top players...');
       const { data, error } = await supabase
         .from('players')
         .select('wallet, xp')
         .order('xp', { ascending: false })
         .limit(50);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Leaderboard: Fetch error:', error);
+        throw error;
+      }
+      
       if (data) {
+        console.log(`Leaderboard: Successfully fetched ${data.length} players.`);
         setLeaderboard(data.map(p => ({ address: p.wallet, xp: p.xp })));
       }
     } catch (err) {
-      console.error('Error fetching leaderboard:', err);
+      console.error('Leaderboard: Unhandled error during fetch:', err);
     }
   };
 
   // Upsert Player to Supabase
   const upsertPlayer = async (stats: { xp: number, wins: number, losses: number, draws: number }) => {
-    if (!address || !supabase) return;
+    if (!address) {
+      console.warn('Leaderboard: No wallet connected, skipping upsert.');
+      return;
+    }
+    if (!supabase) {
+      console.error('Leaderboard: Supabase client not initialized, skipping upsert.');
+      return;
+    }
+    
     try {
-      const { error } = await supabase
+      console.log(`Leaderboard: Upserting stats for ${address}...`, stats);
+      const { data, error } = await supabase
         .from('players')
         .upsert({
           wallet: address,
@@ -165,9 +183,13 @@ function MainApp() {
           draws: stats.draws
         }, { onConflict: 'wallet' });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Leaderboard: Upsert error:', error);
+        throw error;
+      }
+      console.log('Leaderboard: Stats successfully synced with global database.');
     } catch (err) {
-      console.error('Error upserting player:', err);
+      console.error('Leaderboard: Unhandled error during upsert:', err);
     }
   };
 
@@ -184,17 +206,30 @@ function MainApp() {
   // Fetch user data from Supabase on connect
   useEffect(() => {
     const fetchUserData = async () => {
-      if (!address || !supabase) return;
+      if (!address) {
+        console.log('Profile: No wallet connected, using local/empty state.');
+        return;
+      }
+      if (!supabase) {
+        console.error('Profile: Supabase client not initialized, profile syncing disabled.');
+        return;
+      }
+      
       try {
+        console.log(`Profile: Fetching data for ${address}...`);
         const { data, error } = await supabase
           .from('players')
           .select('*')
           .eq('wallet', address)
           .single();
 
-        if (error && error.code !== 'PGRST116') throw error;
+        if (error && error.code !== 'PGRST116') {
+          console.error('Profile: Fetch error:', error);
+          throw error;
+        }
 
         if (data) {
+          console.log('Profile: Data fetched successfully:', data);
           setGameState(prev => ({
             ...prev,
             xp: data.xp,
@@ -203,10 +238,10 @@ function MainApp() {
             totalDraws: data.draws,
           }));
         } else {
-          // Reset for new user if needed, but the default state is already 0s
+          console.log('Profile: No existing record found for this wallet. Will be created on next game end.');
         }
       } catch (err) {
-        console.error('Error fetching user data:', err);
+        console.error('Profile: Unhandled error during fetch:', err);
       }
     };
 
@@ -884,7 +919,11 @@ function MainApp() {
                 <div className="p-4 border-b border-white/5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold uppercase tracking-widest">Global Challengers</span>
-                    <span className="text-[8px] bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded italic">LIVE</span>
+                    {supabase ? (
+                      <span className="text-[8px] bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded italic">LIVE</span>
+                    ) : (
+                      <span className="text-[8px] bg-red-500/10 text-red-500 border border-red-500/20 px-1.5 py-0.5 rounded italic">OFFLINE - CONFIG MISSING</span>
+                    )}
                   </div>
                   <div className="flex gap-8 text-[10px] text-white/40 uppercase font-mono">
                     <span>Rank</span>
