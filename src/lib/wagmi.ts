@@ -1,8 +1,7 @@
-import { http, createConfig } from 'wagmi';
+import { getDefaultConfig } from '@rainbow-me/rainbowkit';
+import { http } from 'wagmi';
 import { mainnet, sepolia } from 'wagmi/chains';
-import { injected, walletConnect, metaMask } from 'wagmi/connectors';
 import { defineChain } from 'viem';
-import { reconnect } from '@wagmi/core';
 
 // Define Ritual Testnet
 export const ritualTestnet = defineChain({
@@ -28,22 +27,14 @@ export const ritualTestnet = defineChain({
 // Users should replace this with their own at https://cloud.walletconnect.com
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || '3fcc6b4468c7849c493c0bc589417852';
 
-export const config = createConfig({
+export const config = getDefaultConfig({
+  appName: 'RitualOracle',
+  projectId,
   chains: [ritualTestnet, sepolia, mainnet],
-  connectors: [
-    injected(),
-    metaMask(),
-    walletConnect({
-      projectId,
-      showQrModal: true,
-    }),
-  ],
   transports: {
     [ritualTestnet.id]: http(),
     [sepolia.id]: http(),
     [mainnet.id]: http(),
   },
+  ssr: false,
 });
-
-// Reconnect on load - moved to better handle environment constraints
-// reconnect(config);

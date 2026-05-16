@@ -34,6 +34,12 @@ import {
   useBalance,
   useWaitForTransactionReceipt
 } from 'wagmi';
+import { 
+  RainbowKitProvider, 
+  darkTheme,
+  useConnectModal
+} from '@rainbow-me/rainbowkit';
+import '@rainbow-me/rainbowkit/styles.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { config, ritualTestnet } from './lib/wagmi';
 import { formatUnits, parseEther } from 'viem';
@@ -44,7 +50,7 @@ const queryClient = new QueryClient();
 // Real Wallet Hook using Wagmi
 function useWallet() {
   const { address, isConnected } = useAccount();
-  const { connect, connectors } = useConnect();
+  const { connectors } = useConnect();
   const { disconnect } = useDisconnect();
   const { data: balance } = useBalance({ address });
   const { data: ritualBalance } = useBalance({ 
@@ -54,7 +60,6 @@ function useWallet() {
 
   return { 
     address, 
-    connect,
     connectors,
     disconnect, 
     isConnected,
@@ -65,114 +70,10 @@ function useWallet() {
   };
 }
 
-function ConnectModal({ isOpen, onClose, connectors, onConnect }: { isOpen: boolean, onClose: () => void, connectors: readonly any[], onConnect: (connector: any) => void }) {
-  const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center px-6">
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm h-full w-full" 
-      />
-      <motion.div 
-        initial={{ scale: 0.9, y: 20, opacity: 0 }}
-        animate={{ scale: 1, y: 0, opacity: 1 }}
-        exit={{ scale: 0.9, y: 20, opacity: 0 }}
-        className="relative w-full max-w-sm glass p-6 sm:p-8 ritual-glow-strong h-fit mx-auto"
-      >
-        <h3 className="text-lg sm:text-xl font-bold mb-1 sm:mb-2 text-center">Connect Wallet</h3>
-        <p className="text-[10px] text-center text-white/40 mb-6 sm:mb-8 uppercase tracking-widest font-mono italic">
-          {connectors.length > 0 ? "Choose your preferred provider" : "No providers detected"}
-        </p>
-        
-        <div className="space-y-3">
-          {connectors.length > 0 ? (
-            connectors.map((connector) => {
-              // On Desktop (PC), hide non-injected connectors to keep it clean (only show installed)
-              // But always keep WalletConnect for mobile bridging
-              if (!isMobile) {
-                if (connector.id === 'coinbaseWalletSDK' || connector.id === 'metaMask') {
-                  return null;
-                }
-              }
-
-              // In mobile wallet browsers, the wallet is usually named "Injected"
-              // Don't skip it on mobile. On PC, only skip it if it's redundant.
-              if (!isMobile) {
-                if (connector.id === 'injected' && connector.name === 'Injected' && connectors.length > 1) {
-                  return null;
-                }
-              }
-
-              return (
-                <button
-                  key={connector.id}
-                  onClick={() => {
-                    onConnect(connector);
-                    onClose();
-                  }}
-                  className="w-full p-4 glass glass-hover flex items-center justify-between group transition-all border border-white/5 hover:border-primary/50 relative overflow-hidden active:scale-95"
-                >
-                  {/* Background flare on hover */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                  
-                  <div className="flex items-center gap-4 relative z-10">
-                    <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center overflow-hidden border border-white/10 group-hover:border-primary/20 shrink-0 transition-transform group-hover:scale-105 shadow-inner">
-                      {connector.icon ? (
-                        <img src={connector.icon} alt={connector.name} className="w-8 h-8 object-contain" />
-                      ) : (
-                        <div className="bg-primary/10 w-full h-full flex items-center justify-center">
-                          <Wallet size={24} className={cn(
-                            "text-primary transition-transform",
-                            connector.name.toLowerCase().includes("metamask") ? "text-orange-500" : ""
-                          )} />
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-left font-mono">
-                      <span className="font-bold text-sm tracking-tight block text-white group-hover:text-primary transition-colors">
-                        {connector.name === 'Injected' && isMobile ? 'Mobile Browser Wallet' : connector.name}
-                      </span>
-                      <span className="text-[10px] text-white/40 uppercase tracking-tighter">
-                        {connector.id === "walletConnect" ? "Scan QR for Mobile Apps" : 
-                         connector.id === "injected" ? "Currently Used Browser" : "Secure Connection"}
-                      </span>
-                    </div>
-                  </div>
-                  <ChevronRight size={18} className="text-white/20 group-hover:text-primary group-hover:translate-x-1 transition-all" />
-                </button>
-              );
-            })
-          ) : (
-            <div className="py-8 px-4 text-center glass border-dashed border-white/10 rounded-2xl">
-              <ShieldCheck size={32} className="mx-auto mb-4 text-white/20" />
-              <p className="text-xs text-white/60 mb-2">No browser extensions found.</p>
-              <p className="text-[10px] text-white/30 uppercase tracking-wider font-mono">
-                Try opening in a new tab<br/>or check your wallet settings.
-              </p>
-            </div>
-          )}
-        </div>
-        
-        <button 
-          onClick={onClose}
-          className="w-full mt-6 py-3 text-[10px] uppercase tracking-widest text-white/40 hover:text-white transition-colors border-t border-white/5 pt-6"
-        >
-          Cancel
-        </button>
-      </motion.div>
-    </div>
-  );
-}
-
 function MainApp() {
   const wallet = useWallet();
   const { address, isConnected } = wallet;
-  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+  const { openConnectModal, connectModalOpen } = useConnectModal();
 
   useEffect(() => {
     reconnect(config);
@@ -349,7 +250,9 @@ function MainApp() {
 
   const handlePrediction = async (prediction: Prediction) => {
     if (!isConnected) {
-      setIsConnectModalOpen(true);
+      if (openConnectModal) {
+        openConnectModal();
+      }
       return;
     }
     
@@ -487,7 +390,7 @@ function MainApp() {
   };
 
   const Nav = () => {
-    if (currentRound || isPredicting || isTxPending || isConfirming || isConnectModalOpen) return null;
+    if (currentRound || isPredicting || isTxPending || isConfirming || connectModalOpen) return null;
     return (
       <nav className="fixed bottom-0 left-0 right-0 z-50 px-4 sm:px-6 pb-4 sm:pb-6 pt-2 h-20 sm:h-24">
         <div className="max-w-md mx-auto h-full glass flex items-center justify-around ritual-glow shadow-2xl">
@@ -519,7 +422,7 @@ function MainApp() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
-          {wallet.isConnected ? (
+          {isConnected ? (
             <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-2xl p-1 pr-3 shadow-2xl ritual-glow-strong">
               <div className="flex flex-col items-end px-3 py-1 border-r border-white/5">
                 <p className="text-[7px] sm:text-[8px] text-primary/60 uppercase tracking-widest font-mono leading-none mb-1">Ritual Balance</p>
@@ -533,7 +436,7 @@ function MainApp() {
                   className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-xl hover:bg-white/5 transition-colors group"
                 >
                   <span className="hidden sm:inline text-[10px] font-mono font-bold text-white/60 group-hover:text-primary transition-colors">
-                    {wallet.address?.slice(0, 6)}...{wallet.address?.slice(-4)}
+                    {address?.slice(0, 6)}...{address?.slice(-4)}
                   </span>
                   <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-primary flex items-center justify-center border border-primary/20 shrink-0 ritual-glow transition-transform group-active:scale-95">
                     <User size={14} className="text-black" />
@@ -543,7 +446,7 @@ function MainApp() {
             </div>
           ) : (
             <button 
-              onClick={() => setIsConnectModalOpen(true)}
+              onClick={() => openConnectModal?.()}
               className="px-4 sm:px-8 py-2 rounded-xl text-xs sm:text-sm font-black uppercase tracking-[0.2em] transition-all h-10 sm:h-12 bg-white text-black hover:bg-primary shadow-[0_0_30px_rgba(255,255,255,0.1)] flex items-center gap-3 active:scale-95"
             >
               <Wallet size={18} />
@@ -552,17 +455,6 @@ function MainApp() {
           )}
         </div>
       </header>
-
-      <AnimatePresence>
-        {isConnectModalOpen && (
-          <ConnectModal 
-            isOpen={isConnectModalOpen} 
-            onClose={() => setIsConnectModalOpen(false)} 
-            connectors={wallet.connectors}
-            onConnect={(connector) => wallet.connect({ connector })}
-          />
-        )}
-      </AnimatePresence>
 
       <main className="relative z-10 max-w-4xl lg:max-w-6xl mx-auto px-4 sm:px-6 py-4 pb-12">
         <AnimatePresence mode="wait">
@@ -1154,7 +1046,17 @@ export default function App() {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <MainApp />
+        <RainbowKitProvider 
+          theme={darkTheme({
+            accentColor: '#00ff88',
+            accentColorForeground: 'black',
+            borderRadius: 'large',
+            fontStack: 'system',
+            overlayBlur: 'small',
+          })}
+        >
+          <MainApp />
+        </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );
