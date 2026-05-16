@@ -1,6 +1,6 @@
 import { http, createConfig } from 'wagmi';
 import { mainnet, sepolia } from 'wagmi/chains';
-import { injected, walletConnect, coinbaseWallet, metaMask, safe } from 'wagmi/connectors';
+import { injected, walletConnect, metaMask } from 'wagmi/connectors';
 import { defineChain } from 'viem';
 import { reconnect } from '@wagmi/core';
 
@@ -32,6 +32,7 @@ export const config = createConfig({
   chains: [ritualTestnet, sepolia, mainnet],
   connectors: [
     injected(),
+    metaMask(),
     walletConnect({
       projectId,
       showQrModal: true,
@@ -44,5 +45,5 @@ export const config = createConfig({
   },
 });
 
-// Reconnect on load
-reconnect(config);
+// Reconnect on load - moved to better handle environment constraints
+// reconnect(config);

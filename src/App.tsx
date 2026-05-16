@@ -37,6 +37,7 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { config, ritualTestnet } from './lib/wagmi';
 import { formatUnits, parseEther } from 'viem';
+import { reconnect } from '@wagmi/core';
 
 const queryClient = new QueryClient();
 
@@ -65,6 +66,7 @@ function useWallet() {
 }
 
 function ConnectModal({ isOpen, onClose, connectors, onConnect }: { isOpen: boolean, onClose: () => void, connectors: readonly any[], onConnect: (connector: any) => void }) {
+  const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   if (!isOpen) return null;
 
   return (
@@ -90,11 +92,20 @@ function ConnectModal({ isOpen, onClose, connectors, onConnect }: { isOpen: bool
         <div className="space-y-3">
           {connectors.length > 0 ? (
             connectors.map((connector) => {
-              // Skip the generic "Injected" if it doesn't represent a specific found wallet
-              // and we have other options (like WalletConnect or other discovered wallets)
-              // But keep it if it's the ONLY one.
-              if (connector.id === 'injected' && connector.name === 'Injected' && connectors.length > 1) {
-                return null;
+              // On Desktop (PC), hide non-injected connectors to keep it clean (only show installed)
+              // But always keep WalletConnect for mobile bridging
+              if (!isMobile) {
+                if (connector.id === 'coinbaseWalletSDK' || connector.id === 'metaMask') {
+                  return null;
+                }
+              }
+
+              // In mobile wallet browsers, the wallet is usually named "Injected"
+              // Don't skip it on mobile. On PC, only skip it if it's redundant.
+              if (!isMobile) {
+                if (connector.id === 'injected' && connector.name === 'Injected' && connectors.length > 1) {
+                  return null;
+                }
               }
 
               return (
@@ -124,10 +135,11 @@ function ConnectModal({ isOpen, onClose, connectors, onConnect }: { isOpen: bool
                     </div>
                     <div className="text-left font-mono">
                       <span className="font-bold text-sm tracking-tight block text-white group-hover:text-primary transition-colors">
-                        {connector.name}
+                        {connector.name === 'Injected' && isMobile ? 'Mobile Browser Wallet' : connector.name}
                       </span>
                       <span className="text-[10px] text-white/40 uppercase tracking-tighter">
-                        {connector.id === "walletConnect" ? "Scan QR for Mobile Apps" : "Secure Extension"}
+                        {connector.id === "walletConnect" ? "Scan QR for Mobile Apps" : 
+                         connector.id === "injected" ? "Currently Used Browser" : "Secure Connection"}
                       </span>
                     </div>
                   </div>
@@ -161,6 +173,10 @@ function MainApp() {
   const wallet = useWallet();
   const { address, isConnected } = wallet;
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+
+  useEffect(() => {
+    reconnect(config);
+  }, []);
   const [view, setView] = useState<'game' | 'agents' | 'profile'>('game');
   const [selectedAgent, setSelectedAgent] = useState<AIAgent>(AI_AGENTS[0]);
 
