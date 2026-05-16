@@ -124,20 +124,47 @@ function MainApp() {
     }
   };
 
-  // Fetch user data from Supabase on connect
+  // Load user data from localStorage or Supabase on connect
   useEffect(() => {
     const fetchUserData = async () => {
       if (!address) {
         console.log('Profile: No wallet connected, using local/empty state.');
+        setGameState({
+          xp: 0,
+          level: 1,
+          streak: 0,
+          totalWins: 0,
+          totalLosses: 0,
+          totalDraws: 0,
+          badges: []
+        });
         return;
       }
+
+      // 1. Try Loading from localStorage first (requested behavior)
+      const storageKey = `ritual-stats-${address}`;
+      const savedStats = localStorage.getItem(storageKey);
+      
+      if (savedStats) {
+        try {
+          const parsedStats = JSON.parse(savedStats);
+          console.log('Profile: Stats loaded from localStorage:', parsedStats);
+          setGameState(parsedStats);
+          // We still want to sync with Supabase in the background if possible, 
+          // but we prioritize showing local data immediately.
+        } catch (e) {
+          console.error('Profile: Error parsing localStorage stats:', e);
+        }
+      }
+
+      // 2. Fetch from Supabase as fallback/sync
       if (!supabase) {
-        console.error('Profile: Supabase client not initialized, profile syncing disabled.');
+        console.warn('Profile: Supabase client not initialized, skipping remote sync.');
         return;
       }
       
       try {
-        console.log(`Profile: Fetching data for ${address}...`);
+        console.log(`Profile: Fetching data from Supabase for ${address}...`);
         const { data, error } = await supabase
           .from('players')
           .select('*')
@@ -145,29 +172,42 @@ function MainApp() {
           .single();
 
         if (error && error.code !== 'PGRST116') {
-          console.error('Profile: Fetch error:', error);
+          console.error('Profile: Supabase Fetch error:', error);
           throw error;
         }
 
         if (data) {
-          console.log('Profile: Data fetched successfully:', data);
-          setGameState(prev => ({
-            ...prev,
-            xp: data.xp,
-            totalWins: data.wins,
-            totalLosses: data.losses,
-            totalDraws: data.draws,
-          }));
-        } else {
-          console.log('Profile: No existing record found for this wallet. Will be created on next game end.');
+          console.log('Profile: Remote data fetched successfully:', data);
+          setGameState(prev => {
+            // Only update if remote data is "newer" or local was empty
+            // For simplicity, we merge or prefer remote if local was not found
+            if (!savedStats) {
+              return {
+                ...prev,
+                xp: data.xp,
+                totalWins: data.wins,
+                totalLosses: data.losses,
+                totalDraws: data.draws,
+              };
+            }
+            return prev;
+          });
         }
       } catch (err) {
-        console.error('Profile: Unhandled error during fetch:', err);
+        console.error('Profile: Unhandled remote fetch error:', err);
       }
     };
 
     fetchUserData();
   }, [address]);
+
+  // Persist gameState to localStorage whenever it changes
+  useEffect(() => {
+    if (address && gameState.xp !== undefined) {
+      const storageKey = `ritual-stats-${address}`;
+      localStorage.setItem(storageKey, JSON.stringify(gameState));
+    }
+  }, [gameState, address]);
 
   const [isPredicting, setIsPredicting] = useState(false);
   const [currentRound, setCurrentRound] = useState<PredictionRound | null>(null);
